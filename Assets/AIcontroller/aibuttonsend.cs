@@ -13,15 +13,15 @@ public class aibuttonsend : MonoBehaviour
     {
         var intmp = input.GetComponent<TextMeshProUGUI>();
         string intext=intmp.text;
-        var aicontroll = GetComponent<OllamaContorller>();
-        aicontroll.prompt = intext;
+        var aicontroll = GetComponent<OpenAIController>();
+        aicontroll.context = intext;
         aicontroll.SendRequest();
         output.text = aicontroll.responseText;
         return;
     }
     public void Update()
     {
-        var aicontroll = GetComponent<OllamaContorller>();
+        var aicontroll = GetComponent<OpenAIController>();
         output.text = aicontroll.responseText;
     }
 }

@@ -21,7 +21,7 @@ using System;
 using System.Text;
 
 
-public class OllamaContorller : MonoBehaviour
+public class OllamaController : MonoBehaviour
 {
     public enum Emode{
         Generate,
@@ -192,11 +192,11 @@ public class OllamaContorller : MonoBehaviour
     // 流式下载处理器
     private class StreamingDownloadHandler : DownloadHandlerScript
     {
-        private OllamaContorller controller;
+        private OllamaController controller;
         private StringBuilder chunkBuilder = new StringBuilder();
         private Emode mode = Emode.Generate;
 
-        public StreamingDownloadHandler(OllamaContorller controller,Emode mode) : base(new byte[2048])
+        public StreamingDownloadHandler(OllamaController controller,Emode mode) : base(new byte[2048])
         {
             this.controller = controller;
             this.mode = mode;

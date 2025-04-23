@@ -15,7 +15,7 @@ using System.Text;
 using UnityEditor.MPE;
 
 
-public class OpenAIContorller : MonoBehaviour
+public class OpenAIController : MonoBehaviour
 {
 
     //可修改参数
@@ -155,10 +155,10 @@ public class OpenAIContorller : MonoBehaviour
     // 流式下载处理器
     private class StreamingDownloadHandler : DownloadHandlerScript
     {
-        private OpenAIContorller controller;
+        private OpenAIController controller;
         private StringBuilder chunkBuilder = new StringBuilder();
 
-        public StreamingDownloadHandler(OpenAIContorller controller) : base(new byte[2048])
+        public StreamingDownloadHandler(OpenAIController controller) : base(new byte[2048])
         {
             this.controller = controller;
         }
