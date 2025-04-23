@@ -3,7 +3,8 @@
  * 
  * 
  *      类OpenAI接口控制器
- *      尚未进行测试
+ *      
+ *      
  *      
  *      
  **************************************************/
@@ -19,8 +20,8 @@ public class OpenAIController : MonoBehaviour
 {
 
     //可修改参数
-    public string model= "gpt-3.5-turbo";   //模型名称
-    public string baseUrl = "https://api.openai.com/v1/completions";//API URL
+    public string model = "gpt-3.5-turbo";   //模型名称
+    public string baseUrl = "https://api.openai.com/v1/";//API URL
     public string apikey = "";              //API密钥
     public bool stream = false;             //是否流式输出
     public bool ignorethink = true;         //是否忽略think块
@@ -28,7 +29,7 @@ public class OpenAIController : MonoBehaviour
     public int max_tokens = 1000;           //最大token数
     public bool debug = false;              //调试模式,是否打印请求和响应信息
     //无需修改参数,调用
-    public string context;                  //提示词
+    public string content;                  //提示词
     public string responseText;             //响应文本,无需修改
 
     public event Action<string> OnResponseUpdated;
@@ -47,7 +48,7 @@ public class OpenAIController : MonoBehaviour
     // 发送请求协程
     private IEnumerator SendRequestCoroutine()
     {
-        string url = null;
+        string url = baseUrl + "completions";
         string json = null;
         //根据是否使用https设置url
         OpenPutJson openputjson = new OpenPutJson()
@@ -58,10 +59,13 @@ public class OpenAIController : MonoBehaviour
                 new OpenMessageJson
                 {
                     role="user",
-                    context=this.context
+                    content=this.content
                 }
-            }
+            },
+            temperature = this.temperature,
+            stream = this.stream
         };
+        json = JsonUtility.ToJson(openputjson);
         if (debug)
         {
             Debug.Log("请求URL: " + url);
@@ -83,7 +87,7 @@ public class OpenAIController : MonoBehaviour
             }
 
             request.SetRequestHeader("Content-Type", "application/json");
-            request.SetRequestHeader("Authorization","Bearer "+apikey);
+            request.SetRequestHeader("Authorization", "Bearer " + apikey);
 
             yield return request.SendWebRequest();
 
@@ -96,8 +100,8 @@ public class OpenAIController : MonoBehaviour
             }
             else if (!stream)
             {
-                GetJson get = JsonUtility.FromJson<GetJson>(request.downloadHandler.text);
-                ProcessResponse(get.response);
+                OpenGetJson get = JsonUtility.FromJson<OpenGetJson>(request.downloadHandler.text);
+                ProcessResponse(get.choices[0].message.content);
             }
         }
     }
@@ -123,11 +127,10 @@ public class OpenAIController : MonoBehaviour
                 return; // 忽略<think>块内的内容
             }
         }
-
-        // 累积响应
         fullResponseBuilder.Append(chunkResponse);
         responseText = fullResponseBuilder.ToString();
         OnResponseUpdated?.Invoke(responseText);
+        return;
     }
 
     // 处理完整响应（非流式）
@@ -156,9 +159,11 @@ public class OpenAIController : MonoBehaviour
     private class StreamingDownloadHandler : DownloadHandlerScript
     {
         private OpenAIController controller;
-        private StringBuilder chunkBuilder = new StringBuilder();
+        private StringBuilder dataBuffer = new StringBuilder();
+        private const string DataPrefix = "data: ";
+        private const string DoneMessage = "[DONE]";
 
-        public StreamingDownloadHandler(OpenAIController controller) : base(new byte[2048])
+        public StreamingDownloadHandler(OpenAIController controller) : base(new byte[1024])
         {
             this.controller = controller;
         }
@@ -168,65 +173,78 @@ public class OpenAIController : MonoBehaviour
             if (data == null || dataLength == 0)
                 return false;
 
-            string chunk = Encoding.UTF8.GetString(data, 0, dataLength);
-            chunkBuilder.Append(chunk);
+            string newData = Encoding.UTF8.GetString(data, 0, dataLength);
+            dataBuffer.Append(newData);
 
-            // 处理可能的多条JSON响应（API返回逐行JSON）
-            string[] lines = chunkBuilder.ToString().Split('\n');
-            for (int i = 0; i < lines.Length - 1; i++) // 最后一行可能不完整
+            ProcessBuffer();
+
+            return true;
+        }
+
+        private void ProcessBuffer()
+        {
+            string bufferContent = dataBuffer.ToString();
+            int lastNewLine = bufferContent.LastIndexOf('\n');
+
+            if (lastNewLine >= 0)
             {
-                string line = lines[i].Trim();
-                if (!string.IsNullOrEmpty(line))
+                string[] lines = bufferContent.Substring(0, lastNewLine + 1).Split('\n');
+
+                // 保留未处理的部分
+                dataBuffer = new StringBuilder(bufferContent.Substring(lastNewLine + 1));
+
+                foreach (string line in lines)
                 {
-                    try
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+
+                    string trimmedLine = line.Trim();
+                    if (trimmedLine == DoneMessage)
                     {
-                        var response = JsonUtility.FromJson<GetJson>(line);
-                        if (response != null && !string.IsNullOrEmpty(response.response))
-                        {
-                            controller.ProcessResponseChunk(response.response);
-                            if (controller.debug)
-                            // 仅在调试模式下输出
-                            Debug.Log("处理响应: " + response.response); // 调试输出
-                        }
+                        continue;
+                        //return;
                     }
-                    catch (Exception e)
+
+                    if (trimmedLine.StartsWith(DataPrefix))
                     {
-                        Debug.LogWarning("JSON解析错误: " + e.Message);
+                        string jsonContent = trimmedLine.Substring(DataPrefix.Length);
+                        ProcessJsonContent(jsonContent);
                     }
                 }
             }
+        }
 
-            // 保存最后不完整的行
-            if (lines.Length > 0)
-                chunkBuilder = new StringBuilder(lines[lines.Length - 1]);
+        private void ProcessJsonContent(string jsonContent)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(jsonContent)) return;
 
-            return true;
+                var response = JsonUtility.FromJson<StreamResponse>(jsonContent);
+                if (response != null && response.choices != null && response.choices.Length > 0)
+                {
+                    var delta = response.choices[0].delta;
+                    if (delta != null && !string.IsNullOrEmpty(delta.content))
+                    {
+                        if (controller.debug)
+                        {
+                            Debug.Log("收到数据块: " + delta.content);
+                        }
+                        controller.ProcessResponseChunk(delta.content);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("JSON解析错误: " + e.Message + "\n内容: " + jsonContent);
+            }
         }
 
         protected override void CompleteContent()
         {
             // 处理剩余内容
-            string remaining = chunkBuilder.ToString().Trim();
-            if (!string.IsNullOrEmpty(remaining))
-            {
-                try
-                {
-                   
-                        var response = JsonUtility.FromJson<GetJson>(remaining);
-                        if (response != null && !string.IsNullOrEmpty(response.response))
-                        {
-                            controller.ProcessResponseChunk(response.response);
-                            if (controller.debug)
-                                Debug.Log("处理响应: " + response.response);
-                        }
-                    
-                    
-                }
-                catch (Exception e)
-                {
-                    Debug.LogWarning("最终JSON解析错误: " + e.Message);
-                }
-            }
+            ProcessBuffer();
         }
     }
+    
 }
+
