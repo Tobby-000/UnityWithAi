@@ -2,7 +2,7 @@
  * 
  * 
  * 
- *      Ollama接口控制器
+ *      Ollama接口适配器
  *      目前支持Generate和Chat两种模式
  *      可选参数：
  *      流式输出，温度，忽略think块，max_tokens
@@ -21,33 +21,15 @@ using System;
 using System.Text;
 
 
-public class OllamaController : MonoBehaviour
+public class OllamaAdapter : Adapter
 {
-    public enum Emode{
-        Generate,
-        Chat
-    }
-
-    //可修改参数
-    public string model;                    //模型名称
-    public string baseUrl="127.0.0.1:11434";//本地安装的ollama
-    public bool stream = false;             //是否流式输出
-    public bool ignorethink = true;         //是否忽略think块
-    public Emode mode;                      //模式选择
-    public float temperature=0.7f;          //温度
-    public int max_tokens = 1000;           //最大token数
-    public bool ishttps = false;            //是否使用https
-    public bool debug = false;              //调试模式,是否打印请求和响应信息
-    //无需修改参数,调用
-    public string prompt;                   //提示词
-    public string responseText;             //响应文本,无需修改
 
     public event Action<string> OnResponseUpdated;
     private StringBuilder fullResponseBuilder = new StringBuilder();
     private bool inThinkBlock = false;
 
     
-    public void SendRequest()               //根据参数发送请求
+    public override void SendRequest()               //根据参数发送请求
     {
         // 重置状态
         fullResponseBuilder.Clear();
@@ -60,15 +42,15 @@ public class OllamaController : MonoBehaviour
     {
         string url=null;
         string json = null;
-        string protocol = ishttps ? "https://" : "http://";
+        //string protocol = ishttps ? "https://" : "http://";
         //生成模式
         if (mode == Emode.Generate) 
         {
-            url = protocol + baseUrl + "/api/generate";
+            url = baseUrl + "/api/generate";
             var putJson = new PutJson
             {
                 model = this.model,
-                prompt = this.prompt,
+                prompt = this.content,
                 stream = this.stream,
                 options = new ChatOptions
                 {
@@ -79,7 +61,7 @@ public class OllamaController : MonoBehaviour
             json = JsonUtility.ToJson(putJson);//将数据转换为JSON格式
         }
         else if(mode == Emode.Chat) {
-            url = protocol + baseUrl + "/api/chat";
+            url = baseUrl + "/api/chat";
             var chatputjson = new ChatPutJson
             {
                 model = this.model,
@@ -88,7 +70,7 @@ public class OllamaController : MonoBehaviour
                     new ChatMessage
                     {
                         role = "user",
-                        content = this.prompt
+                        content = this.content
                     }
                 },
                 stream = this.stream,
@@ -140,7 +122,7 @@ public class OllamaController : MonoBehaviour
     }
 
     // 处理单个响应块
-    public void ProcessResponseChunk(string chunkResponse)
+    private void ProcessResponseChunk(string chunkResponse)
     {
         if (ignorethink)
         {
@@ -192,11 +174,11 @@ public class OllamaController : MonoBehaviour
     // 流式下载处理器
     private class StreamingDownloadHandler : DownloadHandlerScript
     {
-        private OllamaController controller;
+        private OllamaAdapter controller;
         private StringBuilder chunkBuilder = new StringBuilder();
         private Emode mode = Emode.Generate;
 
-        public StreamingDownloadHandler(OllamaController controller,Emode mode) : base(new byte[2048])
+        public StreamingDownloadHandler(OllamaAdapter controller,Emode mode) : base(new byte[2048])
         {
             this.controller = controller;
             this.mode = mode;

@@ -2,7 +2,7 @@
  * 
  * 
  * 
- *      类OpenAI接口控制器
+ *      类OpenAI接口适配器
  *      
  *      
  *      
@@ -16,28 +16,15 @@ using System.Text;
 using UnityEditor.MPE;
 
 
-public class OpenAIController : MonoBehaviour
+public class OpenAIAdapter : Adapter
 {
-
-    //可修改参数
-    public string model = "gpt-3.5-turbo";   //模型名称
-    public string baseUrl = "https://api.openai.com/v1/";//API URL
-    public string apikey = "";              //API密钥
-    public bool stream = false;             //是否流式输出
-    public bool ignorethink = true;         //是否忽略think块
-    public float temperature = 0.7f;        //温度
-    public int max_tokens = 1000;           //最大token数
-    public bool debug = false;              //调试模式,是否打印请求和响应信息
-    //无需修改参数,调用
-    public string content;                  //提示词
-    public string responseText;             //响应文本,无需修改
-
+    
     public event Action<string> OnResponseUpdated;
     private StringBuilder fullResponseBuilder = new StringBuilder();
     private bool inThinkBlock = false;
 
 
-    public void SendRequest()               //根据参数发送请求
+    public override void SendRequest()               //根据参数发送请求
     {
         // 重置状态
         fullResponseBuilder.Clear();
@@ -48,7 +35,7 @@ public class OpenAIController : MonoBehaviour
     // 发送请求协程
     private IEnumerator SendRequestCoroutine()
     {
-        string url = baseUrl + "completions";
+        string url = baseUrl + "/v1/completions";
         string json = null;
         //根据是否使用https设置url
         OpenPutJson openputjson = new OpenPutJson()
@@ -87,7 +74,7 @@ public class OpenAIController : MonoBehaviour
             }
 
             request.SetRequestHeader("Content-Type", "application/json");
-            request.SetRequestHeader("Authorization", "Bearer " + apikey);
+            request.SetRequestHeader("Authorization", "Bearer " + apiKey);
 
             yield return request.SendWebRequest();
 
@@ -107,7 +94,7 @@ public class OpenAIController : MonoBehaviour
     }
 
     // 处理单个响应块
-    public void ProcessResponseChunk(string chunkResponse)
+    private void ProcessResponseChunk(string chunkResponse)
     {
         if (ignorethink)
         {
@@ -158,12 +145,12 @@ public class OpenAIController : MonoBehaviour
     // 流式下载处理器
     private class StreamingDownloadHandler : DownloadHandlerScript
     {
-        private OpenAIController controller;
+        private OpenAIAdapter controller;
         private StringBuilder dataBuffer = new StringBuilder();
         private const string DataPrefix = "data: ";
         private const string DoneMessage = "[DONE]";
 
-        public StreamingDownloadHandler(OpenAIController controller) : base(new byte[1024])
+        public StreamingDownloadHandler(OpenAIAdapter controller) : base(new byte[1024])
         {
             this.controller = controller;
         }
