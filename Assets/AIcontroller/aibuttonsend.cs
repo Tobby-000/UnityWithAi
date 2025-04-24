@@ -47,6 +47,6 @@ public class aibuttonsend : MonoBehaviour
         {
             var aicontroll = GetComponent<OpenAIController>();
             output.text = aicontroll.responseText;
-        }
+            }
         }
 }
